@@ -56,6 +56,86 @@ def add_reservation_to_sheet(user_id, date_str, time_str, menu, name=None):
         print(f"✅ Google Sheetに追加しました: {row}")
         return True
 
+
     except Exception as e:
         print(f"❌ Google Sheet連携エラー: {e}")
         return False
+
+def get_all_reservations():
+    """
+    全ての予約データを取得する
+    戻り値: 予約のリスト（辞書形式）
+    """
+    client = get_client()
+    if not client: return []
+
+    try:
+        sheet = client.open(SPREADSHEET_NAME).sheet1
+        # 全データを取得（1行目はヘッダーと仮定してスキップしたいが、データのみの場合もあるためそのまま取得して処理側で判断）
+        rows = sheet.get_all_values()
+        
+        reservations = []
+        for i, row in enumerate(rows):
+            # ヘッダー行っぽい場合（日付などの文字が入っている場合）はスキップする簡易ロジック
+            if len(row) > 0 and row[0] == "日付": continue
+            
+            # データが足りない行はスキップ
+            if len(row) < 3: continue
+
+            # [date, time, user_id, menu, name, timestamp]
+            reservations.append({
+                "row_index": i + 1, # スプレッドシートは1始まり
+                "date": row[0],
+                "time": row[1],
+                "user_id": row[2],
+                "menu": row[3] if len(row) > 3 else "Unknown",
+                "name": row[4] if len(row) > 4 else "Guest"
+            })
+        return reservations
+
+    except Exception as e:
+        print(f"❌ 予約データ取得エラー: {e}")
+        return []
+
+def cancel_reservation(user_id):
+    """
+    指定ユーザーの未来の予約を探して削除する
+    """
+    client = get_client()
+    if not client: return False
+
+    try:
+        sheet = client.open(SPREADSHEET_NAME).sheet1
+        rows = sheet.get_all_values()
+        
+        today_str = datetime.datetime.now().strftime('%Y-%m-%d')
+        
+        target_row_index = -1
+        target_date = ""
+
+        # 下から順に探して、一番新しい（未来の）予約を消すのが自然
+        for i in range(len(rows) - 1, -1, -1):
+            row = rows[i]
+            if len(row) < 3: continue
+            
+            r_date = row[0]
+            r_user_id = row[2]
+
+            # ユーザーIDが一致し、かつ日付が今日以降のもの
+            if r_user_id == user_id and r_date >= today_str:
+                target_row_index = i + 1 # 1-based index
+                target_date = r_date
+                break
+        
+        if target_row_index != -1:
+            sheet.delete_rows(target_row_index)
+            print(f"🗑️ 予約削除成功: 行{target_row_index} ({target_date})")
+            return True
+        else:
+            print("ℹ️ キャンセル対象の予約が見つかりませんでした。")
+            return False
+
+    except Exception as e:
+        print(f"❌ キャンセル処理エラー: {e}")
+        return False
+
