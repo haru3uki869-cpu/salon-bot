@@ -63,10 +63,11 @@ def create_rich_menu_image(path):
             font = ImageFont.load_default()
 
     # Define Areas
+
     # Text labels (Japanese) for better UX
     areas = [
         {"rect": [(0, 0), (width//3, height)], "color": color_reserve, "text": "予約\nReserve"},
-        {"rect": [(width//3, 0), (width*2//3, height)], "color": color_info, "text": "店舗情報\nInfo"},
+        {"rect": [(width//3, 0), (width*2//3, height)], "color": color_info, "text": "予約キャンセル\nCancel"},
         {"rect": [(width*2//3, 0), (width, height)], "color": color_phone, "text": "電話\nTel"}
     ]
     
@@ -119,10 +120,10 @@ def setup_rich_menu():
                     bounds=RichMenuBounds(x=0, y=0, width=833, height=843),
                     action=MessageAction(label="予約する", text="予約")
                 ),
-                # Center: Info
+                # Center: Cancel (Changed)
                 RichMenuArea(
                     bounds=RichMenuBounds(x=833, y=0, width=833, height=843),
-                    action=MessageAction(label="店舗情報", text="店舗情報")
+                    action=MessageAction(label="予約キャンセル", text="キャンセル")
                 ),
                 # Right: Phone
                 RichMenuArea(
