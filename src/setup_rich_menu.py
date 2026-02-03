@@ -56,14 +56,14 @@ def create_rich_menu_image(path):
     ]
     
     font = None
-    for path in font_paths:
-        if os.path.exists(path):
+    for f_path in font_paths:
+        if os.path.exists(f_path):
             try:
-                font = ImageFont.truetype(path, 110, index=0) # Index 0 usually works for ttc
-                print(f"✅ Loaded System Font: {path}")
+                font = ImageFont.truetype(f_path, 110, index=0) # Index 0 usually works for ttc
+                print(f"✅ Loaded System Font: {f_path}")
                 break
             except Exception as e:
-                print(f"⚠️ Failed to load {path}: {e}")
+                print(f"⚠️ Failed to load {f_path}: {e}")
     
     if font is None:
         print("⚠️ All Japanese fonts failed. Trying generic English font (will show tofu for JP).")
@@ -77,11 +77,11 @@ def create_rich_menu_image(path):
 
     # Define Areas
 
-    # Text labels (Japanese) for better UX
+    # Text labels (English only to avoid tofu blocks)
     areas = [
-        {"rect": [(0, 0), (width//3, height)], "color": color_reserve, "text": "予約\nReserve"},
-        {"rect": [(width//3, 0), (width*2//3, height)], "color": color_info, "text": "予約キャンセル\nCancel"},
-        {"rect": [(width*2//3, 0), (width, height)], "color": color_phone, "text": "電話\nTel"}
+        {"rect": [(0, 0), (width//3, height)], "color": color_reserve, "text": "Reserve"},
+        {"rect": [(width//3, 0), (width*2//3, height)], "color": color_info, "text": "Cancel"},
+        {"rect": [(width*2//3, 0), (width, height)], "color": color_phone, "text": "Tel"}
     ]
     
     for area in areas:
