@@ -1,92 +1,117 @@
-
 import os
-import datetime
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except ImportError:
-    pass
+import sys
+import argparse
+from datetime import datetime, timedelta
+from dotenv import load_dotenv
 
-from linebot import LineBotApi
-from linebot.models import TextMessage
-from linebot.exceptions import LineBotApiError
-from google_sheets import get_all_reservations
+# ローカルモジュールのインポート設定
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+import google_sheets
 
-# 環境変数からLINE BOTのトークンを取得
-CHANNEL_ACCESS_TOKEN = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN")
+# LINE BOT SDK v3
+from linebot.v3.messaging import (
+    Configuration,
+    ApiClient,
+    MessagingApi,
+    PushMessageRequest,
+    TextMessage
+)
+from linebot.v3.exceptions import ApiException
 
-def send_reminders():
+# Load env variables (for local run)
+load_dotenv()
+
+CHANNEL_ACCESS_TOKEN = os.getenv('LINE_CHANNEL_ACCESS_TOKEN')
+
+def send_reminders(target_type=None):
     """
-    明日の予約者と当日の予約者にリマインドを送る
+    リマインダーを送信する関数
+    
+    Args:
+        target_type (str): 
+            'tomorrow' -> 明日の予約者へのみ送信 (前日リマインド)
+            'today'    -> 今日の予約者へのみ送信 (当日リマインド)
+            None       -> 両方送信 (デフォルト)
     """
     if not CHANNEL_ACCESS_TOKEN:
-        print("❌ LINE_CHANNEL_ACCESS_TOKENが設定されていません。")
+        print("❌ Error: LINE_CHANNEL_ACCESS_TOKEN is not set.")
         return
 
-    line_bot_api = LineBotApi(CHANNEL_ACCESS_TOKEN)
-    reservations = get_all_reservations()
-    
+    # Google Sheetsから予約全件取得
+    reservations = google_sheets.get_all_reservations()
     if not reservations:
-        print("ℹ️ 予約データがありません（または取得失敗）。")
+        print("📭 予約データがありません。")
         return
 
-    # 日付の計算
-    today = datetime.date.today()
-    tomorrow = today + datetime.timedelta(days=1)
+    # 日付計算
+    today = datetime.now().date()
+    tomorrow = today + timedelta(days=1)
     
     today_str = today.strftime('%Y-%m-%d')
     tomorrow_str = tomorrow.strftime('%Y-%m-%d')
+    
+    print(f"🔄 リマインド確認開始 (Type: {target_type})")
+    print(f"   Today: {today_str}, Tomorrow: {tomorrow_str}")
 
-    print(f"📅 リマインド実行: 今日={today_str}, 明日={tomorrow_str}")
+    # LINE API設定
+    configuration = Configuration(access_token=CHANNEL_ACCESS_TOKEN)
+    
+    count = 0
+    with ApiClient(configuration) as api_client:
+        line_bot_api = MessagingApi(api_client)
 
-    count_tomorrow = 0
-    count_today = 0
+        for res in reservations:
+            user_id = res['user_id']
+            res_date = res['date']   # YYYY-MM-DD
+            res_time = res['time']
+            menu = res['menu']
+            
+            message_text = ""
 
-    for res in reservations:
-        user_id = res['user_id']
-        res_date = res['date']
-        res_time = res['time']
-        menu = res['menu']
-
-        # 前日リマインド
-        if res_date == tomorrow_str:
-            try:
-                message = (
-                    f"【前日リマインド】\n"
-                    f"明日 {res_time} からのご予約をお待ちしております✨\n"
-                    f"メニュー: {menu}\n\n"
-                    f"※変更やキャンセルがある場合は、メニューからその旨お知らせください。"
+            # --- 明日の予約（前日リマインド） ---
+            # 「tomorrow」指定 または 指定なしの場合に実行
+            if res_date == tomorrow_str and (target_type == 'tomorrow' or target_type is None):
+                message_text = (
+                    f"こんばんは！明日 {tomorrow_str} のご予約確認です。\n\n"
+                    f"⏰ 時間: {res_time}〜\n"
+                    f"📝 メニュー: {menu}\n\n"
+                    f"ご来店をお待ちしております✨\n"
+                    f"変更やキャンセルがある場合は、お早めにご連絡ください。"
                 )
-                line_bot_api.push_message(user_id, TextMessage(text=message))
-                print(f"✅ 前日リマインド送信: {user_id} ({res_date} {res_time})")
-                count_tomorrow += 1
-            except LineBotApiError as e:
-                print(f"❌ 送信エラー({user_id}): {e}")
-
-        # 当日リマインド
-        elif res_date == today_str:
-            try:
-                message = (
-                    f"【本日リマインド】\n"
-                    f"本日はご予約ありがとうございます😊\n"
-                    f"日時: {res_time}〜\n"
-                    f"メニュー: {menu}\n\n"
-                    f"ご来店を心よりお待ちしております！気をつけてお越しください。"
+            
+            # --- 今日の予約（当日リマインド） ---
+            # 「today」指定 または 指定なしの場合に実行
+            elif res_date == today_str and (target_type == 'today' or target_type is None):
+                message_text = (
+                    f"おはようございます☀️\n本日 {today_str} のご予約当日です。\n\n"
+                    f"⏰ 時間: {res_time}〜\n"
+                    f"📝 メニュー: {menu}\n\n"
+                    f"お気をつけてお越しくださいませ💇‍♀️"
                 )
-                line_bot_api.push_message(user_id, TextMessage(text=message))
-                print(f"✅ 当日リマインド送信: {user_id} ({res_date} {res_time})")
-                count_today += 1
-            except LineBotApiError as e:
-                print(f"❌ 送信エラー({user_id}): {e}")
 
-    print(f"🏁 完了: 前日リマインド={count_tomorrow}件, 当日リマインド={count_today}件")
+            # メッセージがあれば送信
+            if message_text:
+                try:
+                    line_bot_api.push_message(
+                        PushMessageRequest(
+                            to=user_id,
+                            messages=[TextMessage(text=message_text)]
+                        )
+                    )
+                    print(f"✅ リマインド送信成功: {user_id} ({res_date} {res_time})")
+                    count += 1
+                except ApiException as e:
+                    print(f"❌ LINE API送信エラー ({user_id}): {e}")
+                except Exception as e:
+                    print(f"❌ 予期せぬエラー ({user_id}): {e}")
+
+    print(f"🏁 リマインド処理完了: {count}件送信")
 
 if __name__ == "__main__":
-    # 環境変数をロードするために python-dotenv を使う（ローカル実行時用）
-    try:
-        from dotenv import load_dotenv
-        load_dotenv()
-    except ImportError:
-        pass # Render上などでは入っていない場合があるが、環境変数は設定済み想定
-
-    send_reminders()
+    # コマンドライン引数の解析
+    parser = argparse.ArgumentParser(description='Send LINE reminders for salon reservations.')
+    parser.add_argument('--type', choices=['today', 'tomorrow'], help='Specify reminder type: "today" (morning) or "tomorrow" (evening)', default=None)
+    
+    args = parser.parse_args()
+    
+    send_reminders(target_type=args.type)
