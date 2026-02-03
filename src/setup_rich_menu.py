@@ -46,18 +46,31 @@ def create_rich_menu_image(path):
     img = Image.new('RGB', (width, height), color='#FFFFFF')
     draw = ImageDraw.Draw(img)
     
-    # Use MacOS System Font (Helvetica) to ensure it renders correctly
-    font_path = "/System/Library/Fonts/Helvetica.ttc"
-    try:
-        # index=0 is usually Regular or Bold depends on the ttc
-        font = ImageFont.truetype(font_path, 130, index=0)
-        print("✅ Loaded System Font: Helvetica")
-    except Exception as e:
-        print(f"⚠️ System font loaded failed: {e}. Trying generic...")
+    # Use MacOS System Font (Hiragino Sans) for Japanese support
+    # Note: Path might vary by MacOS version
+    font_paths = [
+        "/System/Library/Fonts/jp/HiraginoSans-W6.ttc",
+        "/System/Library/Fonts/Hiragino Sans GB.ttc",
+        "/System/Library/Fonts/ヒラギノ角ゴシック W6.ttc",
+        "/Library/Fonts/Arial Unicode.ttf" # Fallback with some JP support
+    ]
+    
+    font = None
+    for path in font_paths:
+        if os.path.exists(path):
+            try:
+                font = ImageFont.truetype(path, 110, index=0) # Index 0 usually works for ttc
+                print(f"✅ Loaded System Font: {path}")
+                break
+            except Exception as e:
+                print(f"⚠️ Failed to load {path}: {e}")
+    
+    if font is None:
+        print("⚠️ All Japanese fonts failed. Trying generic English font (will show tofu for JP).")
         try:
              # Fallback to another common path
             font_path = "/Library/Fonts/Arial.ttf"
-            font = ImageFont.truetype(font_path, 130)
+            font = ImageFont.truetype(font_path, 110)
         except:
             print("⚠️ All fonts failed. Using default (very small).")
             font = ImageFont.load_default()

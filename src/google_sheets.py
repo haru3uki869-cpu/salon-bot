@@ -114,6 +114,8 @@ def cancel_reservation(user_id):
         target_date = ""
 
         # 下から順に探して、一番新しい（未来の）予約を消すのが自然
+        target_reservation = None
+
         for i in range(len(rows) - 1, -1, -1):
             row = rows[i]
             if len(row) < 3: continue
@@ -124,18 +126,22 @@ def cancel_reservation(user_id):
             # ユーザーIDが一致し、かつ日付が今日以降のもの
             if r_user_id == user_id and r_date >= today_str:
                 target_row_index = i + 1 # 1-based index
-                target_date = r_date
+                target_reservation = {
+                    "date": r_date,
+                    "time": row[1],
+                    "menu": row[3] if len(row) > 3 else "Unknown"
+                }
                 break
         
-        if target_row_index != -1:
+        if target_row_index != -1 and target_reservation:
             sheet.delete_rows(target_row_index)
-            print(f"🗑️ 予約削除成功: 行{target_row_index} ({target_date})")
-            return True
+            print(f"🗑️ 予約削除成功: 行{target_row_index} ({target_reservation['date']})")
+            return target_reservation
         else:
             print("ℹ️ キャンセル対象の予約が見つかりませんでした。")
-            return False
+            return None
 
     except Exception as e:
         print(f"❌ キャンセル処理エラー: {e}")
-        return False
+        return None
 

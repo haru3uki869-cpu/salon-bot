@@ -217,6 +217,32 @@ def handle_message(event):
                     )
                 )
 
+
+        elif text in ["キャンセル", "予約キャンセル"]:
+            # Google Sheetsからキャンセル
+            canceled_info = google_sheets.cancel_reservation(user_id)
+            
+            if canceled_info:
+                # ユーザー要望: キャンセル内容をわかりやすく返す
+                reply_msg = (
+                    f"✅ 以下の予約をキャンセルしました。\n\n"
+                    f"📅 {canceled_info['date']} {canceled_info['time']}\n"
+                    f"📝 メニュー: {canceled_info['menu']}\n\n"
+                    f"またのご予約をお待ちしております。"
+                )
+            else:
+                reply_msg = (
+                    "ℹ️ キャンセル可能な予約が見つかりませんでした。\n"
+                    "（既にキャンセル済みか、もし過去の予約の場合は店舗へ直接ご連絡ください）"
+                )
+            
+            line_bot_api.reply_message(
+                ReplyMessageRequest(
+                    reply_token=event.reply_token,
+                    messages=[TextMessage(text=reply_msg)]
+                )
+            )
+
         elif text == "店舗情報":
             video_url = "https://example.com/salon_intro.mp4" # ダミーURL、必要であれば実際の動画URLへ
             info_msg = (
