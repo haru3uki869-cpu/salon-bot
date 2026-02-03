@@ -77,11 +77,11 @@ def create_rich_menu_image(path):
 
     # Define Areas
 
-    # Text labels (English only to avoid tofu blocks)
+    # Text labels (Japanese)
     areas = [
-        {"rect": [(0, 0), (width//3, height)], "color": color_reserve, "text": "Reserve"},
-        {"rect": [(width//3, 0), (width*2//3, height)], "color": color_info, "text": "Cancel"},
-        {"rect": [(width*2//3, 0), (width, height)], "color": color_phone, "text": "Tel"}
+        {"rect": [(0, 0), (width//3, height)], "color": color_reserve, "text": "予約\nReserve"},
+        {"rect": [(width//3, 0), (width*2//3, height)], "color": color_info, "text": "キャンセル\nCancel"},
+        {"rect": [(width*2//3, 0), (width, height)], "color": color_phone, "text": "電話\nTel"}
     ]
     
     for area in areas:

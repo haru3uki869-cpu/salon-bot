@@ -230,6 +230,25 @@ def handle_message(event):
                     f"📝 メニュー: {canceled_info['menu']}\n\n"
                     f"またのご予約をお待ちしております。"
                 )
+
+                # --- 管理者（オーナー）への通知 ---
+                # 本番ではオーナーのUser IDを指定しますが、今はデモとして「操作した人」に通知します
+                try:
+                    admin_msg = (
+                        f"🗑️ 【管理者通知】予約がキャンセルされました。\n\n"
+                        f"👤 顧客ID: {user_id[:8]}...\n"
+                        f"📅 日時: {canceled_info['date']} {canceled_info['time']}\n"
+                        f"📝 メニュー: {canceled_info['menu']}"
+                    )
+                    line_bot_api.push_message(
+                        PushMessageRequest(
+                            to=user_id, # ここをオーナーID (os.getenv('OWNER_LINE_ID')) に変更すれば本番OK
+                            messages=[TextMessage(text=admin_msg)]
+                        )
+                    )
+                except Exception as e:
+                    print(f"Failed to send admin notification: {e}")
+                # ----------------------------------
             else:
                 reply_msg = (
                     "ℹ️ キャンセル可能な予約が見つかりませんでした。\n"
