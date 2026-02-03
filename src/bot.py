@@ -89,37 +89,24 @@ def handle_message(event):
             menu_name = text.split(":")[1].strip()
             
             # 所要時間（スロット数）の判定
-            # 1スロット = 30分
-            required_slots = 2 # デフォルト: カット (60分)
+            required_slots = 2
             if "カラー" in menu_name:
-                required_slots = 3 # 90分
+                required_slots = 3
             elif "ヘッドスパ" in menu_name:
-                required_slots = 1 # 30分
+                required_slots = 1
             
-            # セッションに保存
+            # セッションに保存 & 状態を日付選択待ちへ
             user_sessions[user_id] = {
                 "menu": menu_name,
-                "slots": required_slots
+                "slots": required_slots,
+                "step": "waiting_date"
             }
             
-            # 空き状況を検索
-            target_date = datetime.now().date() + timedelta(days=1)
-            start_search = datetime.combine(target_date, scheduler.OPEN_TIME)
-            end_search = datetime.combine(target_date, scheduler.CLOSE_TIME)
-            
-            reply_msg = ""
-            try:
-                existing_events = lark_calendar.get_calendar_events(start_search, end_search)
-                available = scheduler.check_availability(required_slots, target_date, existing_events)
-                
-                if not available:
-                    reply_msg = f"{target_date.strftime('%Y/%m/%d')} は満席です😭\n別の日程またはメニューをお試しください。"
-                else:
-                    slots_str = "\n".join([f"・{s['label'].split('(')[0]}" for s in available[:8]])
-                    reply_msg = f"【選択: {menu_name}】\n📅 {target_date.strftime('%m/%d')} の空き状況:\n{slots_str}\n\n※予約したい時間を「10:00」のように入力して送信してください。"
-            except Exception as e:
-                reply_msg = f"エラーが発生しました: {str(e)}"
-
+            reply_msg = (
+                f"【選択: {menu_name}】\n"
+                "ご希望の日付を入力してください。\n"
+                "例: 2/10, 2月10日, 明日"
+            )
             line_bot_api.reply_message(
                 ReplyMessageRequest(
                     reply_token=event.reply_token,
@@ -127,19 +114,82 @@ def handle_message(event):
                 )
             )
 
-        # 3. 時間が入力された場合（予約実行）
+        # 3. 日付が入力された場合（状態: waiting_date）
+        elif user_sessions.get(user_id, {}).get("step") == "waiting_date":
+            input_date_str = text.strip()
+            target_date = None
+            
+            # 日付パース
+            try:
+                current_year = datetime.now().year
+                if input_date_str in ["明日", "あした"]:
+                    target_date = datetime.now().date() + timedelta(days=1)
+                elif input_date_str in ["今日", "きょう"]:
+                    target_date = datetime.now().date()
+                else:
+                     # 2/10, 2-10, 2026/02/10 などを簡易パース
+                    normalized = input_date_str.replace("月", "/").replace("日", "").replace("-", "/")
+                    if normalized.count("/") == 1: # "2/10" format
+                        month, day = map(int, normalized.split("/"))
+                        target_date = datetime(current_year, month, day).date()
+                        # もし過去の日付なら来年にする？（今回は単純に現在年）
+                        if target_date < datetime.now().date():
+                             # 過去ならエラーにするか、来年にするか。一旦そのまま
+                             pass
+                    elif normalized.count("/") == 2: # "2026/2/10"
+                        target_date = datetime.strptime(normalized, "%Y/%m/%d").date()
+                    else:
+                        raise ValueError("Invalid date format")
+
+                # セッションに日付を保存 & 状態更新
+                user_sessions[user_id]["date"] = target_date
+                user_sessions[user_id]["step"] = "waiting_time"
+                
+                # 空き状況検索
+                start_search = datetime.combine(target_date, scheduler.OPEN_TIME)
+                end_search = datetime.combine(target_date, scheduler.CLOSE_TIME)
+                required_slots = user_sessions[user_id]["slots"]
+
+                existing_events = lark_calendar.get_calendar_events(start_search, end_search)
+                available = scheduler.check_availability(required_slots, target_date, existing_events)
+                
+                if not available:
+                    reply_msg = f"{target_date.strftime('%Y/%m/%d')} は満席です😭\n別の日程を入力してください。"
+                    user_sessions[user_id]["step"] = "waiting_date" # 日付選択やり直し
+                else:
+                    slots_str = "\n".join([f"・{s['label'].split('(')[0]}" for s in available[:8]])
+                    reply_msg = f"📅 {target_date.strftime('%m/%d')} の空き状況:\n{slots_str}\n\n※予約したい時間を「10:00」のように入力して送信してください。"
+
+            except Exception as e:
+                reply_msg = "日付を正しく認識できませんでした。「2/10」のように入力してください。"
+            
+            line_bot_api.reply_message(
+                ReplyMessageRequest(
+                    reply_token=event.reply_token,
+                    messages=[TextMessage(text=reply_msg)]
+                )
+            )
+
+        # 4. 時間が入力された場合（予約実行）
         elif ":" in text and len(text) <= 5:
+            # セッションチェック（日付が決まっているか？）
+            session = user_sessions.get(user_id)
+            if not session or "date" not in session:
+                 # いきなり時間入力された場合は、デフォルトで明日とみなすか、メニュー選択へ誘導
+                 # 今回は旧仕様との互換性で「明日」扱いにする（またはエラー）
+                 target_date = datetime.now().date() + timedelta(days=1)
+                 session = {"menu": "カット", "slots": 2} # デフォルト
+            else:
+                 target_date = session["date"]
+
             try:
                 target_time_str = text.strip()
                 target_hour, target_minute = map(int, target_time_str.split(":"))
                 
-                # セッションから情報を取得（なければデフォルト）
-                session = user_sessions.get(user_id, {"menu": "カット", "slots": 2})
                 menu_name = session["menu"]
                 required_slots = session["slots"]
                 
                 # 時間計算
-                target_date = datetime.now().date() + timedelta(days=1)
                 start_dt = datetime.combine(target_date, time(target_hour, target_minute))
                 # スロット数から終了時間を計算
                 duration_minutes = required_slots * scheduler.SLOT_UNIT_MINUTES
@@ -159,6 +209,10 @@ def handle_message(event):
                             messages=[TextMessage(text=reply_msg)]
                         )
                     )
+
+                    # セッションクリア
+                    if user_id in user_sessions:
+                        del user_sessions[user_id]
 
                     # 2. オーナー（管理者）への通知
                     # 今回はデモとして「予約した本人」に管理者通知も送ります。
